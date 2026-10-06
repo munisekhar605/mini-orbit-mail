@@ -33,6 +33,7 @@ export class AuthService implements OnModuleInit {
             dkimPrivateKey: sec.dkimPrivateKey,
             spfRecord: sec.spfRecord,
             dmarcRecord: sec.dmarcRecord,
+            isActive: true,
           });
         }
 
@@ -56,20 +57,47 @@ export class AuthService implements OnModuleInit {
   }
 
   async register(data: { email: string; password: string; domain?: string; role?: string }) {
-    const existing = await this.userModel.findOne({ email: data.email.toLowerCase() });
+    const cleanEmail = data.email.toLowerCase().trim();
+    const existing = await this.userModel.findOne({ email: cleanEmail });
     if (existing) {
       throw new BadRequestException('User with this email already exists');
     }
 
-    const domainName = data.domain || data.email.split('@')[1];
+    const domainName = (data.domain || cleanEmail.split('@')[1]).toLowerCase().trim();
+    if (!domainName) {
+      throw new BadRequestException('A valid email domain is required');
+    }
+
+    // Check or auto-register the domain with 2048-bit RSA DKIM keys & pending DNS status
+    let domainRecord = await this.domainModel.findOne({ name: domainName });
+    const isFirstUserInDomain = !domainRecord;
+
+    if (!domainRecord) {
+      const serverIp = process.env.SERVER_IP || '127.0.0.1';
+      const sec = generateDomainSecurityRecords(domainName, serverIp);
+      domainRecord = await this.domainModel.create({
+        name: domainName,
+        maxUsers: 50,
+        maxQuotaMb: 50000,
+        status: 'pending',
+        dkimSelector: sec.dkimSelector,
+        dkimPublicKey: sec.dkimPublicKey,
+        dkimPrivateKey: sec.dkimPrivateKey,
+        spfRecord: sec.spfRecord,
+        dmarcRecord: sec.dmarcRecord,
+        isActive: true,
+      });
+      console.log(`[AuthService] Auto-created domain ${domainName} with status: pending`);
+    }
+
     const salt = await bcrypt.genSalt(10);
     const passwordHash = await bcrypt.hash(data.password, salt);
 
     const user = await this.userModel.create({
-      email: data.email.toLowerCase(),
+      email: cleanEmail,
       passwordHash,
-      role: data.role || 'user',
-      domain: domainName.toLowerCase(),
+      role: isFirstUserInDomain ? 'admin' : (data.role || 'user'),
+      domain: domainName,
       quotaMb: 2048,
       isActive: true,
     });
@@ -83,13 +111,16 @@ export class AuthService implements OnModuleInit {
         email: user.email,
         role: user.role,
         domain: user.domain,
+        domainStatus: domainRecord.status,
+        domainId: domainRecord._id,
         quotaMb: user.quotaMb,
       },
     };
   }
 
   async login(data: { email: string; password: string }) {
-    const user = await this.userModel.findOne({ email: data.email.toLowerCase() });
+    const cleanEmail = data.email.toLowerCase().trim();
+    const user = await this.userModel.findOne({ email: cleanEmail });
     if (!user || !user.isActive) {
       throw new UnauthorizedException('Invalid email or password');
     }
@@ -98,6 +129,8 @@ export class AuthService implements OnModuleInit {
     if (!isMatch) {
       throw new UnauthorizedException('Invalid email or password');
     }
+
+    const domainRecord = await this.domainModel.findOne({ name: user.domain });
 
     const token = this.generateToken(user);
     return {
@@ -108,6 +141,8 @@ export class AuthService implements OnModuleInit {
         email: user.email,
         role: user.role,
         domain: user.domain,
+        domainStatus: domainRecord?.status || 'pending',
+        domainId: domainRecord?._id,
         quotaMb: user.quotaMb,
         usedQuotaMb: user.usedQuotaMb,
       },
