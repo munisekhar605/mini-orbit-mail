@@ -16,4 +16,7 @@ export class SendEmailDto {
   @IsOptional()
   @IsString()
   bodyHtml?: string;
+
+  @IsOptional()
+  attachments?: any[];
 }
