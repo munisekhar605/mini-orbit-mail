@@ -1,0 +1,119 @@
+services:
+  mongodb:
+    image: mongo:7-jammy
+    container_name: orbit-mongodb
+    restart: always
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_DATABASE: mini_orbit
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - orbit-net
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mongo-express:
+    image: mongo-express:latest
+    container_name: orbit-mongo-express
+    restart: always
+    ports:
+      - "8081:8081"
+    environment:
+      ME_CONFIG_MONGODB_SERVER: mongodb
+      ME_CONFIG_MONGODB_PORT: 27017
+      ME_CONFIG_MONGODB_ENABLE_ADMIN: "true"
+      ME_CONFIG_BASICAUTH_USERNAME: admin
+      ME_CONFIG_BASICAUTH_PASSWORD: AdminPassword123!
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - orbit-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: orbit-redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - orbit-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: orbit-rabbitmq
+    restart: always
+    ports:
+      - "5672:5672"     # AMQP protocol
+      - "15672:15672"   # Management Web UI (guest / guest)
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - orbit-net
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: orbit-backend
+    restart: always
+    ports:
+      - "4000:4000"
+    environment:
+      - NODE_ENV=production
+      - PORT=4000
+      - MONGODB_URI=mongodb://mongodb:27017/mini_orbit
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672
+      - JWT_SECRET=${JWT_SECRET:-mini_orbit_super_secret_jwt_key_2026_xyz}
+      - JWT_EXPIRES_IN=7d
+      - CORS_ORIGIN=${CORS_ORIGIN:-http://localhost:3000,http://127.0.0.1:3000}
+      - SERVER_IP=${SERVER_IP:-127.0.0.1}
+      - MAIL_HOST=${MAIL_HOST:-127.0.0.1}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - IMAP_PORT=${IMAP_PORT:-993}
+      - MAIL_TLS=${MAIL_TLS:-false}
+      - INITIAL_ADMIN_EMAIL=${INITIAL_ADMIN_EMAIL:-admin@orbitmail.local}
+      - INITIAL_ADMIN_PASSWORD=${INITIAL_ADMIN_PASSWORD:-AdminPassword123!}
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - orbit-net
+
+volumes:
+  mongo_data:
+    driver: local
+  redis_data:
+    driver: local
+  rabbitmq_data:
+    driver: local
+
+networks:
+  orbit-net:
+    driver: bridge
