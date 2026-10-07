@@ -1,10 +1,31 @@
 {
-  "name": "mini-orbit",
-  "version": "0.0.1",
-  "description": "",
-  "author": "",
-  "private": true,
-  "license": "UNLICENSED",
+  "name": "mini-orbit-mail",
+  "version": "1.0.0",
+  "description": "Open-Source Self-Hosted Modern Email Platform & Webmail Server built with NestJS, MongoDB, RabbitMQ, and Redis",
+  "author": "munisekhar605",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/munisekhar605/mini-orbit-mail.git"
+  },
+  "bugs": {
+    "url": "https://github.com/munisekhar605/mini-orbit-mail/issues"
+  },
+  "homepage": "https://github.com/munisekhar605/mini-orbit-mail#readme",
+  "keywords": [
+    "email",
+    "webmail",
+    "mail-server",
+    "nestjs",
+    "mongodb",
+    "rabbitmq",
+    "redis",
+    "dkim",
+    "spf",
+    "dmarc",
+    "self-hosted",
+    "open-source"
+  ],
   "scripts": {
     "build": "nest build",
     "deploy": "nest deploy",
